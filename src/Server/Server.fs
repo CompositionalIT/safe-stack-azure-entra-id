@@ -2,6 +2,11 @@ module Server
 
 open Fable.Remoting.Server
 open Fable.Remoting.Giraffe
+open Microsoft.AspNetCore.Authentication.OpenIdConnect
+open Microsoft.AspNetCore.Builder
+open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Identity.Web
 open Saturn
 
 open Shared
@@ -38,7 +43,22 @@ let webApp =
     |> Remoting.fromValue todosApi
     |> Remoting.buildHttpHandler
 
+let registerMiddleware (appBuilder : IApplicationBuilder) =
+    appBuilder
+        .UseAuthentication()
+        .UseAuthorization()
+
+let registerServices (services : IServiceCollection) =
+    let sp = services.BuildServiceProvider()
+    let config = sp.GetService<IConfiguration>()
+    services
+        .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+        .AddMicrosoftIdentityWebApp(config)
+        .Services
+
 let app = application {
+    app_config registerMiddleware
+    service_config registerServices
     use_router webApp
     memory_cache
     use_static "public"
