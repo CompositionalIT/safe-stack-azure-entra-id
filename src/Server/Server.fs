@@ -2,12 +2,16 @@ module Server
 
 open Fable.Remoting.Server
 open Fable.Remoting.Giraffe
+open Microsoft.AspNetCore.Authentication
 open Microsoft.AspNetCore.Authentication.OpenIdConnect
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Identity.Web
 open Saturn
+open Giraffe
+open Giraffe.Auth
 
 open Shared
 
@@ -37,11 +41,27 @@ let todosApi = {
         }
 }
 
-let webApp =
+let remotingApi =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder Route.builder
     |> Remoting.fromValue todosApi
     |> Remoting.buildHttpHandler
+
+let signIn : HttpHandler =
+    fun (next : HttpFunc) (ctx : HttpContext) ->
+        task {
+            do! ctx.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme)
+            return! next ctx
+        }
+
+let requiresAuth =
+    requiresAuthentication signIn
+
+let webApp =
+    choose [
+        route "/" >=> requiresAuth >=> text "hello world"
+        routeStartsWith "/api" >=> remotingApi
+    ]
 
 let registerMiddleware (appBuilder : IApplicationBuilder) =
     appBuilder
@@ -55,6 +75,7 @@ let registerServices (services : IServiceCollection) =
         .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
         .AddMicrosoftIdentityWebApp(config)
         .Services
+        .AddAuthorization()
 
 let app = application {
     app_config registerMiddleware
